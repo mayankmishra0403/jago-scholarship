@@ -37,6 +37,7 @@ import App from '@/App.tsx'
 import { AppProvider } from '@/store/app.tsx'
 import { auth, AuthError } from '@/lib/supabase.ts'
 import { aadhaarCheckDigit, validateAadhaar } from '@/lib/identity.ts'
+import { t } from '@shared/i18n.ts'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -153,6 +154,58 @@ describe('OTP client', () => {
     await expect(auth.sendOtp('a@example.com')).rejects.toMatchObject({
       code: 'otp_disabled',
     })
+  })
+
+  it('keeps the email quota error distinguishable from the per-address cooldown', async () => {
+    // Both arrive as 429 and both are configuration problems rather than bad
+    // input, but they need different advice: an exhausted project quota means
+    // "attach your own SMTP", a per-address cooldown means "wait a minute".
+    // Collapsing them into one branch tells the user the wrong thing.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            error_code: 'over_email_send_rate_limit',
+            msg: 'email rate limit exceeded',
+          }),
+          { status: 429, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const err = await auth.sendOtp('a@example.com').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(AuthError)
+    expect(err).toMatchObject({ status: 429, code: 'over_email_send_rate_limit' })
+    // The raw GoTrue text carries no guidance, which is why the UI maps it.
+    expect((err as AuthError).message).toBe('email rate limit exceeded')
+  })
+
+  it('surfaces a 429 with no error_code as a plain cooldown, not an email quota', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 429 })),
+    )
+
+    const err = await auth.sendOtp('a@example.com').catch((e: unknown) => e)
+    expect(err).toMatchObject({ status: 429, code: '' })
+  })
+
+  it('has a translated message for every auth error code the UI branches on', () => {
+    // A missing key renders as the raw key in the UI, so the branch above would
+    // silently show "auth.err.email_rate_limit" to a Hindi speaker.
+    for (const lang of ['en', 'hi'] as const) {
+      for (const key of [
+        'auth.err.otp_disabled',
+        'auth.err.email_rate_limit',
+        'auth.err.rate_limit',
+        'auth.err.network',
+      ] as const) {
+        const value = t(lang, key)
+        expect(value, `${lang}:${key}`).not.toBe(key)
+        expect(value.length).toBeGreaterThan(10)
+      }
+    }
   })
 
   it('presents the refresh token as a bearer on refresh', async () => {

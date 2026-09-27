@@ -44,16 +44,23 @@ export const Login = ({ onDone }: { onDone: (s: AuthSession | null) => void }) =
       })
       setStep('code')
     } catch (err) {
-      // `otp_disabled` means the Supabase project has Email OTP turned off. It
-      // is a configuration state, not a bad address, so say which one it is.
-      if (err instanceof AuthError && err.code === 'otp_disabled') {
-        setError(
-          'Email OTP is not enabled on this Supabase project. Turn it on in Authentication → Sign In / Providers → Email, then try again.',
-        )
-      } else if (err instanceof AuthError) {
-        setError(err.message)
+      // These three are configuration or quota states, not bad input. Showing
+      // GoTrue's raw text for them is worse than useless: "email rate limit
+      // exceeded" does not tell a first-time user that the site owner has to
+      // attach an SMTP provider, and it does not distinguish an exhausted quota
+      // from the 60-second per-address cooldown.
+      if (err instanceof AuthError) {
+        if (err.code === 'otp_disabled') {
+          setError(t(lang, 'auth.err.otp_disabled'))
+        } else if (err.code === 'over_email_send_rate_limit') {
+          setError(t(lang, 'auth.err.email_rate_limit'))
+        } else if (err.status === 429) {
+          setError(t(lang, 'auth.err.rate_limit'))
+        } else {
+          setError(err.message)
+        }
       } else {
-        setError('Could not reach the authentication service.')
+        setError(t(lang, 'auth.err.network'))
       }
     } finally {
       setBusy(false)
