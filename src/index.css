@@ -1,0 +1,247 @@
+@import 'tailwindcss';
+
+/**
+ * JagoScholarship design tokens.
+ * Warm, high-contrast palette: the app is used on low-end Android phones in
+ * tribal districts, often in bright outdoor light, so contrast is generous and
+ * tap targets are large.
+ */
+@theme {
+  --color-brand-50: #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-200: #99f6e4;
+  --color-brand-300: #5eead4;
+  --color-brand-400: #2dd4bf;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-800: #115e59;
+  --color-brand-900: #134e4a;
+
+  --color-ink-50: #f8fafc;
+  --color-ink-100: #f1f5f9;
+  --color-ink-200: #e2e8f0;
+  --color-ink-300: #cbd5e1;
+  --color-ink-400: #94a3b8;
+  --color-ink-500: #64748b;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-800: #1e293b;
+  --color-ink-900: #0f172a;
+
+  --color-saffron: #f59e0b;
+  --color-saffron-soft: #fef3c7;
+  --color-monsoon: #0369a1;
+  --color-monsoon-soft: #e0f2fe;
+  --color-leaf: #15803d;
+  --color-leaf-soft: #dcfce7;
+  --color-ember: #b91c1c;
+  --color-ember-soft: #fee2e2;
+  --color-plum: #7c3aed;
+  --color-plum-soft: #ede9fe;
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --font-devanagari: 'Noto Sans Devanagari', 'Nirmala UI', 'Kohinoor Devanagari', var(--font-sans);
+  --font-olchiki: 'Noto Sans Ol Chiki', 'Noto Sans Oriya', var(--font-sans);
+  --font-odia: 'Noto Sans Oriya', 'Kalinga', var(--font-sans);
+}
+
+:root {
+  color-scheme: light;
+  /* 16px root keeps native inputs from zooming on Android WebView. */
+  font-size: 16px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-ink-100);
+  color: var(--color-ink-900);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/**
+ * Script stacks for the tribal-language surfaces.
+ *
+ * `lang` is set per element, not just on <html>: a tribal-language answer sits
+ * inside an otherwise English page, so the answer bubble carries `lang="sat"`
+ * and picks up the Ol Chiki stack while the surrounding chrome stays in Inter.
+ * The document's own language is the full-UI language (see AppProvider).
+ */
+:lang(hi),
+:lang(gon) {
+  font-family: var(--font-devanagari);
+}
+:lang(sat),
+:lang(ora),
+:lang(mun),
+:lang(sora) {
+  font-family: var(--font-olchiki);
+}
+:lang(kui) {
+  font-family: var(--font-odia);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-ink-200 bg-white shadow-sm;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+  /* Tailwind v4 will not `@apply` a class defined in a layer, so the button
+     base lives in a shared selector list and the variants add only colour. */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-brand-700 text-white hover:bg-brand-800;
+  }
+  .btn-secondary {
+    @apply border border-ink-300 bg-white text-ink-800 hover:bg-ink-50;
+  }
+  .btn-ghost {
+    @apply text-ink-700 hover:bg-ink-100;
+  }
+  .field {
+    @apply min-h-11 w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-base text-ink-900 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20;
+  }
+  .label {
+    @apply mb-1 block text-sm font-medium text-ink-700;
+  }
+  .hint {
+    @apply text-xs text-ink-500;
+  }
+  .tap {
+    @apply min-h-11;
+  }
+
+  /**
+   * GDS-style skip link. Hidden until focused, then pinned to the top of the
+   * viewport. Keyboard and screen-reader users land here first so they can jump
+   * the 40-odd nav controls above the main content.
+   */
+  .skip-link {
+    @apply absolute top-2 left-2 z-50 -translate-y-24 rounded-lg bg-ink-900 px-4 py-3 text-sm font-bold text-white transition-transform focus:translate-y-0;
+  }
+
+  /**
+   * Focus indicator. Browsers drop the native ring on `outline-none` fields, and
+   * a 3px solid bar with an offset is far more visible on a low-quality screen
+   * in bright sunlight than the default hairline. Uses currentColor so it
+   * inherits correctly inside inverted buttons.
+   */
+  .focus-ring {
+    @apply outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-700;
+  }
+}
+
+/* Apply the focus treatment app-wide to every interactive control. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* On the dark header, a dark ring is invisible. */
+.on-dark :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline-color: #fbbf24;
+}
+
+/**
+ * WCAG 2.2 SC 2.5.8 (Target Size, Minimum) asks for 24x24 CSS px; GDS asks for
+ * 44x44 on touch. Anything that is not one of the full-size button/form classes
+ * gets the floor enforced here, which catches the small text links that would
+ * otherwise be the only undersized targets on the page.
+ */
+@media (pointer: coarse) {
+  a[href]:not(.no-target-size),
+  button:not(.no-target-size),
+  summary,
+  [role='button'],
+  [role='option'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Inline links inside a sentence stay inline; the floor does not apply to
+     links that flow with text, only to standalone controls. */
+  p a[href],
+  li a[href]:only-child {
+    min-height: 0;
+    min-width: 0;
+  }
+}
+
+/* Respect the OS "reduce motion" setting for our own scroll behaviour too. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thin scrollbars inside panels, invisible enough to ignore on touch. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-300) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--color-ink-300);
+  border-radius: 3px;
+}
+
+@keyframes jago-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: jago-rise 0.18s ease-out;
+}
+
+@keyframes jago-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.animate-pulse-dot {
+  animation: jago-pulse 1.2s ease-in-out infinite;
+}
