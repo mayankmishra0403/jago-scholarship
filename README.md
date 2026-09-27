@@ -13,6 +13,40 @@ schemes — with the reasoning shown to the student, the reviewer and the Minist
 
 ---
 
+## Repository and deployment
+
+- Source: <https://github.com/mayankmishra0403/jago-scholarship> (public)
+- Production: <https://238-bay.vercel.app>
+- Vercel project `238` (team `mayankmishra0403s-projects`), framework detected as Vite, with
+  `main` as the production branch. Vercel is connected to the GitHub repository, so a push to
+  `main` deploys; a pull request gets a preview.
+
+Supabase config is supplied as build-time variables, because Vite inlines them:
+
+| Variable | Scope | Value |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | build | project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | build | publishable key only — never a service-role key |
+| `VITE_DEV_ROLE_SWITCH` | build | enables the "view as" switcher for the demo |
+| `VITE_DEV_SIMULATOR` | build | enables the connector failure simulator |
+| `VITE_UIDAI_GATEWAY_URL` | build | **intentionally unset** — see "Aadhaar verification" |
+| `UIDAI_GATEWAY_URL`, `UIDAI_CLIENT_ID`, `UIDAI_CLIENT_SECRET` | runtime, server only | unset; no partner agreement yet |
+
+The publishable key is safe in a browser by design and is the only credential the client
+receives. `api/` is deployed as a Vercel function, so `GET /api/identity/aadhaar` answers
+`{"ok":true,"configured":false}` until gateway credentials exist — which is the honest state
+of the integration, reported rather than papered over.
+
+### Migrations
+
+Eleven migrations in `supabase/migrations/` take an empty project to the current state,
+including the seeded demo cohort, the reviewer queue, and the four security migrations that
+close the `is_demo` privacy hole and revoke the trigger-function RPC paths. They are written
+idempotently (`ON CONFLICT DO NOTHING`, `CREATE OR REPLACE`) so re-running is a no-op, which
+is what makes them safe to apply to a database that is already seeded.
+
+---
+
 ## Run it
 
 ```bash
