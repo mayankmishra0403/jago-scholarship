@@ -587,6 +587,27 @@ export function evaluateRule(
       const reference = refValid ? asOn : now
       const age = ageOn(profile.dateOfBirth, reference)
       const level = profile.courseLevel
+      /**
+       * Some schemes band the limit by course (NOS: 32/35/38) and some state one
+       * figure for every course (NFST: "Maximum 36 years"). `flat` covers the
+       * latter — without it a scholar whose course level does not resolve to a
+       * band gets a vague warning instead of the actual limit being applied.
+       */
+      const flat = p.flat as unknown as number | undefined
+      if (typeof flat === 'number' && Number.isFinite(flat)) {
+        const flatOk = age <= flat
+        const flatRef = reference.toISOString().slice(0, 10)
+        return makeCheck(
+          rule,
+          flatOk ? 'pass' : 'fail',
+          `Age not more than ${flat} years`,
+          `Age on ${flatRef}: ${Number.isNaN(age) ? 'unknown' : `${age} years`}`,
+          flatOk
+            ? `Your age of ${age} years on ${flatRef} is within the ${flat}-year limit for this scheme.`
+            : `The age limit for this scheme is ${flat} years as on ${flatRef}. At ${age} years you are over the limit, so this application cannot be considered.`,
+          'self_declared',
+        )
+      }
       const key = level.includes('masters')
         ? 'masters'
         : level.includes('postdoc')

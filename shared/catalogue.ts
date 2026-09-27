@@ -23,6 +23,16 @@ import type { DocumentRequirement, Institution, Scheme, SchemeRule } from './typ
 const MOTA_PORTAL = 'https://tribal.nic.in/ScholarshiP.aspx'
 const NOS_GUIDELINES =
   'https://tribal.nic.in/downloads/guidelines/NOS/RevisedGuidelinesNOS07102022.pdf'
+/**
+ * Use the MoTA-hosted copy, not the scholarships.gov.in mirror. Both are titled
+ * "National Fellowship & Scholarship for Higher Education of Scheduled Tribe
+ * Students 2021-22 to 2025-26", but the mirror is a partial extract that starts
+ * at section 5.4 — it contains no eligibility section, no age limit and no
+ * marks criterion. Citing it meant a reviewer following the source link to
+ * confirm a rule would find the rule absent.
+ */
+const NFST_GUIDELINES =
+  'https://tribal.nic.in/downloads/guidelines/NFS/GuidelinesFellowshipandScholarship2022.pdf'
 
 export const SCHEMES: Scheme[] = [
   {
@@ -125,7 +135,7 @@ export const SCHEMES: Scheme[] = [
     ] as DocumentRequirement[],
     deadlineFresh: '2026-10-31',
     deadlineRenewal: '2027-01-31',
-    sourceUrl: 'https://scholarships.gov.in/public/schemeGuidelines/tribalfellowshipguideline.pdf',
+    sourceUrl: NFST_GUIDELINES,
     figuresVerifiedOn: '2026-09-26',
     accent: '#7C3AED',
     sortOrder: 3,
@@ -152,10 +162,10 @@ export const SCHEMES: Scheme[] = [
       hra: 'At par with UGC rates (8% / 16% / 24% by city)',
       escortAllowance: '₹2,000 (Divyangjan candidates)',
       disbursal: 'Quarterly through PFMS-DBT into the scholar Aadhaar-seeded bank account',
-      priorityOrder: 'PVTG first, then female candidates, then BPL, then inter-se merit',
+      priorityOrder: 'Divyangjan (38) → PVTG (25) → Female (225) → ST Others (462), of 750 slots; an offer from an IIT / AIIMS / IIM / IISER takes priority and reduces the ST-Others quota',
     },
     eligibilitySummary:
-      'ST student who has passed the Post-Graduation examination and is admitted to a regular, full-time M.Phil / Ph.D in a UGC-entitled or Government-funded institution. Not eligible for any other fellowship for the same study. No State or University-wise ceiling.',
+      "ST student who has passed the Post-Graduation examination with at least 55% marks and is admitted to a regular, full-time M.Phil / Ph.D (or M.Phil + Ph.D) in a UGC-entitled or Government-funded institution. Maximum age 36 years as on 1 July of the year of award. There is no income criterion for this fellowship. 750 fellowships are awarded each year with no State or University-wise ceiling, allocated Divyangjan (38), PVTG (25), Female (225) and ST Others (462); a Divyangjan candidate must produce a disability certificate of at least 40%. Fellowship runs for 2 years for M.Phil and 5 years for Ph.D, or until submission of the dissertation, whichever is earlier. Not eligible for any other fellowship of the Union or a State Government for the same study.",
     documentRequirements: [
       { docType: 'st_certificate', label: 'ST / PVTG certificate', mandatory: true, reusable: true, autoFetchFrom: 'edistrict' },
       { docType: 'aadhaar', label: 'Aadhaar', mandatory: true, autoFetchFrom: 'uidai' },
@@ -166,7 +176,7 @@ export const SCHEMES: Scheme[] = [
     ] as DocumentRequirement[],
     deadlineFresh: '2026-10-31',
     deadlineRenewal: '2027-01-31',
-    sourceUrl: 'https://scholarships.gov.in/public/schemeGuidelines/tribalfellowshipguideline.pdf',
+    sourceUrl: NFST_GUIDELINES,
     figuresVerifiedOn: '2026-09-26',
     accent: '#B45309',
     sortOrder: 4,
@@ -222,15 +232,17 @@ export const RULES: SchemeRule[] = [
   { schemeCode: 'post_matric', ruleKey: 'domicile_required', ruleType: 'domicile', params: {}, severity: 'blocker', labelEn: 'Domicile certificate of the State / UT is required', labelHi: 'आवासीय प्रमाण पत्र आवश्यक', sourceUrl: MOTA_PORTAL },
   { schemeCode: 'post_matric', ruleKey: 'one_scheme_at_a_time', ruleType: 'single_scheme', params: {}, severity: 'blocker', labelEn: 'A student may hold only one scholarship at a time', labelHi: 'एक समय में केवल एक छात्रवृत्ति', sourceUrl: MOTA_PORTAL },
   // Top Class
-  { schemeCode: 'top_class', ruleKey: 'income_6lakh', ruleType: 'income_ceiling', params: { maxAnnual: 600000 }, severity: 'blocker', labelEn: 'Family income must not exceed Rs. 6.00 lakh per annum', labelHi: 'पारिवारिक आय वार्षिक Rs. 6.00 लाख से अधिक नहीं होनी चाहिए', sourceUrl: 'https://scholarships.gov.in/public/schemeGuidelines/tribalfellowshipguideline.pdf' },
+  { schemeCode: 'top_class', ruleKey: 'income_6lakh', ruleType: 'income_ceiling', params: { maxAnnual: 600000 }, severity: 'blocker', labelEn: 'Family income must not exceed Rs. 6.00 lakh per annum', labelHi: 'पारिवारिक आय वार्षिक Rs. 6.00 लाख से अधिक नहीं होनी चाहिए', sourceUrl: NFST_GUIDELINES },
   { schemeCode: 'top_class', ruleKey: 'notified_institute', ruleType: 'institution_flag', params: { flag: 'is_top_class_institute' }, severity: 'blocker', labelEn: 'Admission must be in a Ministry-notified Top Class Institute', labelHi: 'मंत्रालय द्वारा अधिसूचित टॉप क्लास संस्थान में प्रवेश आवश्यक', sourceUrl: MOTA_PORTAL },
   { schemeCode: 'top_class', ruleKey: 'graduation_level', ruleType: 'course_level', params: { allow: ['graduation', 'post_graduation'] }, severity: 'blocker', labelEn: 'Course must be Graduation or Post-Graduation', labelHi: 'पाठ्यक्रम स्नातक या स्नातकोत्तर होना चाहिए', sourceUrl: MOTA_PORTAL },
   { schemeCode: 'top_class', ruleKey: 'one_scheme_at_a_time', ruleType: 'single_scheme', params: {}, severity: 'blocker', labelEn: 'A student may hold only one scholarship at a time', labelHi: 'एक समय में केवल एक छात्रवृत्ति', sourceUrl: MOTA_PORTAL },
   // NFST
-  { schemeCode: 'nfst', ruleKey: 'post_graduation_required', ruleType: 'course_level', params: { allow: ['m_phil', 'ph_d'] }, severity: 'blocker', labelEn: 'Must be admitted to a regular, full-time M.Phil / Ph.D after a Post-Graduation degree', labelHi: 'स्नातकोत्तर उपाधि के बाद नियमित पूर्णकालिक M.Phil / Ph.D में प्रवेश आवश्यक', sourceUrl: 'https://scholarships.gov.in/public/schemeGuidelines/tribalfellowshipguideline.pdf' },
-  { schemeCode: 'nfst', ruleKey: 'ugc_entitled_institute', ruleType: 'institution_flag', params: { flag: 'is_nfst_host' }, severity: 'blocker', labelEn: 'Institute must be UGC-entitled, Government-funded or an Institute of National Importance', labelHi: 'संस्थान UGC-योग्य या सरकार द्वारा वित्तपोषित होना चाहिए', sourceUrl: 'https://scholarships.gov.in/public/schemeGuidelines/tribalfellowshipguideline.pdf' },
-  { schemeCode: 'nfst', ruleKey: 'no_other_fellowship', ruleType: 'single_scheme', params: { scope: 'all' }, severity: 'blocker', labelEn: 'NFST scholars cannot hold any other fellowship for the same study', labelHi: 'NFST छात्र उसी अध्ययन हेतु अन्य छात्रवृत्ति नहीं ले सकता', sourceUrl: 'https://www.ugc.gov.in/pdfnews/0242709_Revised-guidelines-of-NFSTS.pdf' },
-  { schemeCode: 'nfst', ruleKey: 'quarterly_review', ruleType: 'percentile', params: { note: 'Progressive quarterly review of research progress' }, severity: 'info', labelEn: 'Fellowship is released quarterly after progress review', labelHi: 'प्रगति की समीक्षा के बाद तिमाही जारी', sourceUrl: 'https://scholarships.gov.in/public/schemeGuidelines/tribalfellowshipguideline.pdf' },
+  { schemeCode: 'nfst', ruleKey: 'post_graduation_required', ruleType: 'course_level', params: { allow: ['m_phil', 'ph_d'] }, severity: 'blocker', labelEn: 'Must be admitted to a regular, full-time M.Phil / Ph.D after a Post-Graduation degree', labelHi: 'स्नातकोत्तर उपाधि के बाद नियमित पूर्णकालिक M.Phil / Ph.D में प्रवेश आवश्यक', sourceUrl: NFST_GUIDELINES },
+  { schemeCode: 'nfst', ruleKey: 'ugc_entitled_institute', ruleType: 'institution_flag', params: { flag: 'is_nfst_host' }, severity: 'blocker', labelEn: 'Institute must be UGC-entitled, Government-funded or an Institute of National Importance', labelHi: 'संस्थान UGC-योग्य या सरकार द्वारा वित्तपोषित होना चाहिए', sourceUrl: NFST_GUIDELINES },
+  { schemeCode: 'nfst', ruleKey: 'no_other_fellowship', ruleType: 'single_scheme', params: { scope: 'all' }, severity: 'blocker', labelEn: 'NFST scholars cannot hold any other fellowship for the same study', labelHi: 'NFST छात्र उसी अध्ययन हेतु अन्य छात्रवृत्ति नहीं ले सकता', sourceUrl: NFST_GUIDELINES },
+  { schemeCode: 'nfst', ruleKey: 'quarterly_review', ruleType: 'percentile', params: { note: 'Progressive quarterly review of research progress' }, severity: 'info', labelEn: 'Fellowship is released quarterly after progress review', labelHi: 'प्रगति की समीक्षा के बाद तिमाही जारी', sourceUrl: NFST_GUIDELINES },
+  { schemeCode: 'nfst', ruleKey: 'age_limit_36', ruleType: 'age_limit', params: { flat: 36, asOn: '2026-07-01' }, severity: 'blocker', labelEn: 'Age must not exceed 36 years as on 1 July of the year of award', labelHi: 'आयु पुरस्कार वर्ष की 1 जुलाई को 36 वर्ष से अधिक नहीं होनी चाहिए', sourceUrl: NFST_GUIDELINES },
+  { schemeCode: 'nfst', ruleKey: 'marks_55_pg', ruleType: 'percentile', params: { note: 'Minimum 55% marks at the final examination at PG level' }, severity: 'blocker', labelEn: 'Minimum 55% marks at the final examination at Post-Graduation level', labelHi: 'स्नातकोत्तर स्तर की अंतिम परीक्षा में न्यूनतम 55% अंक', sourceUrl: NFST_GUIDELINES },
   // NOS
   { schemeCode: 'nos', ruleKey: 'income_6lakh', ruleType: 'income_ceiling', params: { maxAnnual: 600000 }, severity: 'blocker', labelEn: 'Family income must not exceed Rs. 6.00 lakh per annum', labelHi: 'पारिवारिक आय वार्षिक Rs. 6.00 लाख से अधिक नहीं होनी चाहिए', sourceUrl: MOTA_PORTAL },
   { schemeCode: 'nos', ruleKey: 'qs_top_1000', ruleType: 'qs_rank', params: { maxRank: 1000 }, severity: 'info', labelEn: 'Admission to a QS top 1000 institute waives the 55% marks test and takes first priority in the merit list', labelHi: 'QS टॉप 1000 संस्थान में प्रवेश 55% अंक की शर्त से छूट देता है और मेरिट सूची में प्रथम प्राथमिकता देता है', sourceUrl: NOS_GUIDELINES },

@@ -237,6 +237,100 @@ describe('NFST course level', () => {
   })
 })
 
+describe('NFST: rules verified against the scheme guidelines', () => {
+  // Source: "National Fellowship & Scholarship for Higher Education of Scheduled
+  // Tribe Students 2021-22 to 2025-26", sections 2.1-2.5. Note the mirror on
+  // scholarships.gov.in is a partial extract starting at 5.4 and contains none
+  // of this; the MoTA copy is the complete document.
+  const nfstInput = (profile: Partial<StudentProfile> = {}) =>
+    baseInput({
+      scheme: schemeByCode('nfst')!,
+      rules: rulesFor('nfst'),
+      profile: cleanProfile({ courseLevel: 'm_phil', ...profile }),
+    })
+
+  const check = (key: string, profile: Partial<StudentProfile> = {}) =>
+    verify(nfstInput(profile)).checks.find((c) => c.ruleKey === key)!
+
+  it('applies the 36-year limit measured on 1 July of the award year', () => {
+    // 2.3: "Maximum 36 years, as on first day of July of the relevant year of
+    // award of scholarship." Born Aug 1989 => 36 on 2026-07-01, 37 in Sept.
+    const born = '1989-08-15'
+    const over = check('age_limit_36', { dateOfBirth: born })
+    expect(over.actual).toContain('2026-07-01')
+    expect(over.actual).toContain('36 years')
+    expect(over.status).toBe('pass')
+  })
+
+  it('fails an applicant over 36 on the reference date', () => {
+    expect(check('age_limit_36', { dateOfBirth: '1985-01-01' }).status).toBe('fail')
+  })
+
+  it('uses one flat limit for course levels that have no age band', () => {
+    // NFST states a single figure, not per-course bands like NOS. `graduation`
+    // and `post_graduation` resolve to no band, so without `flat` support these
+    // fall through to a vague "course level does not map to an age band"
+    // warning and the 36-year limit is never actually applied. Using only
+    // m_phil/ph_d here would pass either way, because both map to the phd band.
+    for (const level of ['graduation', 'post_graduation', 'secondary'] as const) {
+      const c = verify(
+        baseInput({
+          scheme: schemeByCode('nfst')!,
+          rules: rulesFor('nfst'),
+          profile: cleanProfile({ courseLevel: level, dateOfBirth: '1985-01-01' }),
+        }),
+      ).checks.find((x) => x.ruleKey === 'age_limit_36')!
+      expect(c.status, level).toBe('fail')
+      expect(c.label, level).toContain('36')
+    }
+  })
+
+  it('treats the 55% PG marks requirement as a real condition', () => {
+    // 2.1 (ii): "minimum 55% marks at the final examination/grading at PG
+    // level". No marks field on the profile, so it must go to a reviewer rather
+    // than silently pass.
+    const c = check('marks_55_pg')
+    expect(c).toBeDefined()
+    expect(c.severity).toBe('blocker')
+    expect(c.status).toBe('skipped')
+    expect(c.explanation).toMatch(/reviewer/i)
+  })
+
+  it('records that the scheme has no income criterion', () => {
+    // 2.2: "There is no income criteria for eligibility in respect of this
+    // scholarship." Encoding a ceiling here would wrongly exclude poor students
+    // from a means-tested-looking scheme that has no means test.
+    expect(schemeByCode('nfst')!.incomeCeiling).toBeNull()
+    expect(rulesFor('nfst').some((r) => r.ruleType === 'income_ceiling')).toBe(false)
+  })
+
+  it('does not block on a low-slot-count scheme wrongly, and keeps 750', () => {
+    expect(schemeByCode('nfst')!.slotsPerYear).toBe(750)
+  })
+
+  it('states the official slot split, with Divyangjan first', () => {
+    // 2.5 (ii): Divyangjan 38, PVTG 25, Female 225, ST Others 462. The previous
+    // text said "PVTG first, then female, then BPL" - BPL appears nowhere in the
+    // guidelines and Divyangjan was missing entirely.
+    const order = schemeByCode('nfst')!.benefit.priorityOrder
+    expect(order).toMatch(/Divyangjan.*38/)
+    expect(order).toMatch(/PVTG.*25/)
+    expect(order).toMatch(/Female.*225/)
+    expect(order).toMatch(/ST Others.*462/)
+    expect(order).not.toMatch(/BPL/)
+  })
+
+  it('cites the complete guidelines document for every NFST rule', () => {
+    // Guards the regression where rules cited a partial PDF that did not
+    // contain the eligibility section at all.
+    const good = 'guidelines/NFS/GuidelinesFellowshipandScholarship2022.pdf'
+    for (const r of rulesFor('nfst')) {
+      expect(r.sourceUrl, r.ruleKey).toContain(good)
+    }
+    expect(schemeByCode('nfst')!.sourceUrl).toContain(good)
+  })
+})
+
 describe('NOS: QS ranking and age limit', () => {
   const nosInput = (profile: Partial<StudentProfile>, data: Record<string, unknown>) =>
     baseInput({
@@ -586,15 +680,19 @@ describe('catalogue matches the Supabase seed', () => {
   })
 
   it('agrees on rule_type and severity for every seeded rule', () => {
-    const corrections = readFileSync(
-      new URL(
-        '../supabase/migrations/20260101001200_correct_nos_rules_against_guidelines.sql',
-        import.meta.url,
-      ),
-      'utf8',
+    // Baseline seed plus every correction migration, in order. The baseline is
+    // deliberately left untouched so the corrections stay auditable, which means
+    // reading only the seed would report the pre-correction severities.
+    const corrections = [
+      '20260101001200_correct_nos_rules_against_guidelines.sql',
+      '20260101001300_correct_nfst_rules_against_guidelines.sql',
+    ].map((f) =>
+      readFileSync(new URL(`../supabase/migrations/${f}`, import.meta.url), 'utf8'),
     )
-    // Amendments are applied on top of the seed, so read them in too.
-    const effective = new Map([...seedRules(), ...seedRulesFrom(corrections)])
+    const effective = new Map([
+      ...seedRules(),
+      ...corrections.flatMap((sql) => [...seedRulesFrom(sql)]),
+    ])
     const mismatches: string[] = []
 
     for (const rule of RULES) {
