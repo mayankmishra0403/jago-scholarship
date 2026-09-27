@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   ENGINE_VERSION,
@@ -9,7 +10,7 @@ import {
   type ConnectorResult,
   type VerificationInput,
 } from '../shared/eligibility.ts'
-import { rulesFor, schemeByCode } from '../shared/catalogue.ts'
+import { RULES, rulesFor, schemeByCode } from '../shared/catalogue.ts'
 import { DEMO_DOCUMENTS, DEMO_PROFILE } from '../shared/demo.ts'
 import type {
   Institution,
@@ -252,11 +253,45 @@ describe('NOS: QS ranking and age limit', () => {
     expect(check.status).toBe('pass')
   })
 
-  it('fails outside the top 1000', () => {
+  it('does not fail a candidate whose university is outside the top 1000', () => {
+    // The 2021-26 NOS guidelines make QS top 1000 a priority provision, not an
+    // eligibility bar: candidates already admitted to a top 1000 institute are
+    // exempt from the 55% marks test and placed first in the merit list. A
+    // candidate ranked below it is still eligible, just lower in the merit
+    // list, so this must not be a fail.
     const check = verify(nosInput({}, { rank: 1450, name: 'Some University' })).checks.find(
       (c) => c.ruleKey === 'qs_top_1000',
     )!
-    expect(check.status).toBe('fail')
+    expect(check.status).toBe('pass')
+    expect(check.severity).toBe('info')
+    expect(check.explanation).toMatch(/does not make you ineligible/i)
+  })
+
+  it('never tells a candidate a lower-ranked university makes them ineligible', () => {
+    // This exact sentence shipped in the app and was a fabrication: the NOS
+    // guidelines contain no such limit. Assert on the wording so it cannot
+    // creep back in through a refactor.
+    const out = verify(nosInput({}, { rank: 1450, name: 'Some University' }))
+    const blob = out.checks.map((c) => `${c.explanation} ${c.expected} ${c.label}`).join(' ')
+    expect(blob).not.toMatch(/not eligible/i)
+    expect(blob).not.toMatch(/limited to the top/i)
+  })
+
+  it('does not block a NOS application on QS rank alone', () => {
+    // The harm this guards: a student who satisfies every real criterion was
+    // told they were ineligible purely because of university ranking.
+    const out = verify(
+      nosInput({ dateOfBirth: '1996-01-01' }, { rank: 1450, name: 'Some University' }),
+    )
+    expect(out.blockingIssues.join(' ')).not.toMatch(/QS|rank/i)
+  })
+
+  it('waives the marks test and notes priority for a top-1000 institute', () => {
+    const check = verify(nosInput({}, { rank: 3, name: 'University of Oxford' })).checks.find(
+      (c) => c.ruleKey === 'qs_top_1000',
+    )!
+    expect(check.status).toBe('pass')
+    expect(check.explanation).toMatch(/55% marks test is waived/i)
   })
 
   it('routes an unresolvable ranking to a human reviewer instead of failing', () => {
@@ -288,6 +323,32 @@ describe('NOS: QS ranking and age limit', () => {
       nosInput({ dateOfBirth: '1996-01-01' }, { rank: 3, name: 'University of Oxford' }),
     ).checks.find((c) => c.ruleKey === 'age_limit')!
     expect(check.status).toBe('pass')
+  })
+
+  it('measures age on 1 July of the selection year, not the day of applying', () => {
+    // The guidelines say "Maximum Age as on 1st July of selection year". Age on
+    // the application date can be a year higher, and for a blocker that decides
+    // the outcome, so the reference date has to be the official one.
+    const check = verify(
+      nosInput({ dateOfBirth: '1994-08-01' }, { rank: 3, name: 'University of Oxford' }),
+    ).checks.find((c) => c.ruleKey === 'age_limit')!
+    // Born Aug 1994 => 31 on 2026-07-01, but 32 on the 2026-09-26 test clock.
+    expect(check.actual).toContain('2026-07-01')
+    expect(check.actual).toContain('31 years')
+    expect(check.status).toBe('pass')
+  })
+
+  it('still applies the 55% marks requirement as a real condition', () => {
+    // The marks test is the actual academic bar for NOS. It has no automated
+    // data source yet, so it must degrade to "a reviewer checks it" rather than
+    // silently passing — omission would be as wrong as the QS over-claim was.
+    const check = verify(nosInput({}, { rank: 3, name: 'University of Oxford' })).checks.find(
+      (c) => c.ruleKey === 'marks_55',
+    )!
+    expect(check).toBeDefined()
+    expect(check.severity).toBe('blocker')
+    expect(check.status).toBe('skipped')
+    expect(check.explanation).toMatch(/reviewer/i)
   })
 })
 
@@ -487,3 +548,102 @@ describe('overall verdict and risk score', () => {
     expect(s).toMatch(/checks passed/)
   })
 })
+
+/**
+ * The runtime reads rules from Supabase; this file is the offline mirror. When
+ * the two disagree the app answers differently depending on whether the DB is
+ * reachable, which is the worst failure mode for an eligibility tool: the same
+ * student gets a different answer depending on network conditions.
+ *
+ * This guard exists because that divergence actually shipped — the NOS
+ * `qs_top_1000` severity differed between the two copies, denying eligible
+ * students when the DB was down.
+ */
+describe('catalogue matches the Supabase seed', () => {
+  const seed = readFileSync(
+    new URL('../supabase/migrations/20260101000100_seed_reference.sql', import.meta.url),
+    'utf8',
+  )
+
+  /** Pull `('code','key','type','params','severity',` rows out of the seed. */
+  const seedRules = (): Map<string, { ruleType: string; severity: string }> => {
+    const out = new Map<string, { ruleType: string; severity: string }>()
+    const re =
+      /\('([a-z_]+)'\s*,\s*'([a-z0-9_]+)'\s*,\s*'([a-z_]+)'\s*,\s*'(\{[^']*\})'\s*,\s*'(blocker|warning|info)'/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(seed)) !== null) {
+      const [, code, key, ruleType, , severity] = m
+      // Later migrations amend rows; the last write wins, same as in Postgres.
+      out.set(`${code}/${key}`, { ruleType, severity })
+    }
+    return out
+  }
+
+  it('finds the NOS rules in the seed', () => {
+    const rules = seedRules()
+    expect(rules.has('nos/qs_top_1000')).toBe(true)
+    expect(rules.has('nos/age_limit')).toBe(true)
+  })
+
+  it('agrees on rule_type and severity for every seeded rule', () => {
+    const corrections = readFileSync(
+      new URL(
+        '../supabase/migrations/20260101001200_correct_nos_rules_against_guidelines.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    )
+    // Amendments are applied on top of the seed, so read them in too.
+    const effective = new Map([...seedRules(), ...seedRulesFrom(corrections)])
+    const mismatches: string[] = []
+
+    for (const rule of RULES) {
+      const row = effective.get(`${rule.schemeCode}/${rule.ruleKey}`)
+      if (!row) {
+        mismatches.push(`${rule.schemeCode}/${rule.ruleKey}: missing from SQL`)
+        continue
+      }
+      if (row.ruleType !== rule.ruleType) {
+        mismatches.push(
+          `${rule.schemeCode}/${rule.ruleKey}: ruleType ts=${rule.ruleType} sql=${row.ruleType}`,
+        )
+      }
+      if (row.severity !== rule.severity) {
+        mismatches.push(
+          `${rule.schemeCode}/${rule.ruleKey}: severity ts=${rule.severity} sql=${row.severity}`,
+        )
+      }
+    }
+    expect(mismatches).toEqual([])
+  })
+
+  it('never seeds a blocker whose only basis is a QS rank', () => {
+    // Guards the specific regression: eligibility was denied on ranking alone.
+    for (const rule of RULES) {
+      if (rule.ruleType === 'qs_rank') {
+        expect(
+          rule.severity,
+          `${rule.schemeCode}/${rule.ruleKey} must not block on QS rank`,
+        ).not.toBe('blocker')
+      }
+    }
+  })
+})
+
+/** Rows written by an `insert ... values` or `update` in a later migration. */
+function seedRulesFrom(sql: string): Map<string, { ruleType: string; severity: string }> {
+  const out = new Map<string, { ruleType: string; severity: string }>()
+  const insertRe =
+    /\('([a-z_]+)'\s*,\s*'([a-z0-9_]+)'\s*,\s*'([a-z_]+)'\s*,\s*'(\{[^']*\})'\s*,\s*'(blocker|warning|info)'/g
+  let m: RegExpExecArray | null
+  while ((m = insertRe.exec(sql)) !== null) {
+    out.set(`${m[1]}/${m[2]}`, { ruleType: m[3], severity: m[5] })
+  }
+  // `update ... set severity = 'info' where scheme_code='nos' and rule_key='x'`
+  const updateRe =
+    /update\s+public\.scheme_rules\s+set\s+severity\s*=\s*'(blocker|warning|info)'[^;]*?where\s+scheme_code\s*=\s*'([a-z_]+)'\s+and\s+rule_key\s*=\s*'([a-z0-9_]+)'/gis
+  while ((m = updateRe.exec(sql)) !== null) {
+    out.set(`${m[2]}/${m[3]}`, { ruleType: out.get(`${m[2]}/${m[3]}`)?.ruleType ?? 'qs_rank', severity: m[1] })
+  }
+  return out
+}

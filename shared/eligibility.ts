@@ -539,27 +539,53 @@ export function evaluateRule(
         return makeCheck(
           rule,
           'review',
-          `University ranked within the top ${maxRank} in QS World University Rankings`,
+          `Admission to a QS top ${maxRank} institute carries merit priority`,
           'QS ranking could not be resolved',
-          'The QS ranking for your university could not be resolved automatically, so a reviewer will check it against the current edition.',
+          'The QS ranking for your university could not be resolved automatically, so a reviewer will confirm whether the priority provision applies.',
           'qs',
         )
       }
-      const ok = rank <= maxRank
+      /**
+       * The 2021-26 NOS guidelines make this a priority provision, not a gate:
+       * "The criteria of marks obtained in Bachelor's/Master's Degree will not
+       * apply to those candidates who have already obtained admissions in top
+       * 1,000 Institutes as QS World ranking" and "First priority will be given
+       * to the candidates ... The merit list will be drawn based on the ranking
+       * of the Institute."
+       *
+       * So a candidate outside the top 1000 is still eligible — they are ranked
+       * lower in the merit list. Returning `fail` here would tell a qualifying
+       * student the scheme "is limited to the top 1000 universities, so this
+       * university is not eligible", which is a fabricated rule and would deny
+       * someone a real benefit. `pass` with the detail kept visible is the
+       * honest encoding.
+       */
+      const withinTop = rank <= maxRank
       return makeCheck(
         rule,
-        ok ? 'pass' : 'fail',
-        `University ranked within the top ${maxRank} in QS`,
+        'pass',
+        `QS ranking ${withinTop ? `within the top ${maxRank}` : `outside the top ${maxRank} — merit priority only`}`,
         `${univ} is ranked ${rank}`,
-        ok
-          ? `${univ} is ranked ${rank} in the current QS World University Rankings, which is within the top ${maxRank} required for this scheme.`
-          : `${univ} is ranked ${rank}. The NOS scheme is limited to the top ${maxRank} universities, so this university is not eligible.`,
+        withinTop
+          ? `${univ} is ranked ${rank} in the latest QS World University Rankings, which is within the top ${maxRank}. The 55% marks test is waived and your application is placed first in the merit list.`
+          : `${univ} is ranked ${rank}, outside the top ${maxRank}. This does not make you ineligible — the 55% marks test applies and your application is ranked below candidates already admitted to a top ${maxRank} institute.`,
         'qs',
       )
     }
 
     case 'age_limit': {
-      const age = ageOn(profile.dateOfBirth, now)
+      /**
+       * The NOS guidelines fix the reference date: "Maximum Age as on 1st July
+       * of selection year". Age on the day the student applies can differ by a
+       * year from age on 1 July, and for a blocker that difference decides
+       * eligibility — so the catalogue carries the official date and we use it
+       * when present, falling back to today only when a scheme states no date.
+       */
+      const asOnRaw = p.asOn as unknown as string | undefined
+      const asOn = typeof asOnRaw === 'string' && asOnRaw.length > 0 ? new Date(asOnRaw) : now
+      const refValid = !Number.isNaN(asOn.getTime())
+      const reference = refValid ? asOn : now
+      const age = ageOn(profile.dateOfBirth, reference)
       const level = profile.courseLevel
       const key = level.includes('masters')
         ? 'masters'
@@ -580,14 +606,15 @@ export function evaluateRule(
       }
       const limit = Number(p[key] as unknown as number)
       const ok = age <= limit
+      const refDate = reference.toISOString().slice(0, 10)
       return makeCheck(
         rule,
         ok ? 'pass' : 'fail',
         `Age not more than ${limit} years for this study level`,
-        `Age on ${now.toISOString().slice(0, 10)}: ${Number.isNaN(age) ? 'unknown' : `${age} years`}`,
+        `Age on ${refDate}: ${Number.isNaN(age) ? 'unknown' : `${age} years`}`,
         ok
-          ? `Your age of ${age} years is within the ${limit}-year limit for this level.`
-          : `The age limit for this level is ${limit} years. At ${age} years you are over the limit, so this application cannot be considered.`,
+          ? `Your age of ${age} years on ${refDate} is within the ${limit}-year limit for this level.`
+          : `The age limit for this level is ${limit} years as on ${refDate}. At ${age} years you are over the limit, so this application cannot be considered.`,
         'self_declared',
       )
     }
